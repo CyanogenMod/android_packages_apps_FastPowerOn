@@ -25,6 +25,8 @@ import android.app.ActivityManager.RunningTaskInfo;
 import android.app.ActivityManager.RunningServiceInfo;
 import android.app.AlarmManager;
 import android.app.PendingIntent;
+import android.app.WallpaperInfo;
+import android.app.WallpaperManager;
 import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
@@ -49,6 +51,7 @@ import android.os.SystemProperties;
 import android.os.SystemClock;
 import android.os.Vibrator;
 import android.provider.Settings;
+import android.text.TextUtils;
 import android.util.Log;
 import android.view.IWindowManager;
 import android.view.View;
@@ -89,10 +92,10 @@ public class FastBoot extends Activity {
     private static final String TAG = "FastBoot";
 
     private PowerManager mPm = null;
-	private static boolean powerOn = false;
+    private static boolean powerOn = false;
     private static final int SEND_AIRPLANE_MODE_BROADCAST = 1;
     private static final int SEND_BOOT_COMPLETED_BROADCAST = 2;
-	public static boolean sendBroadcastDone = false;
+    public static boolean sendBroadcastDone = false;
     private ActivityManager mActivityManager = null;
     private HandlerThread mHandlerThread;
     private Handler mHandler;
@@ -111,39 +114,39 @@ public class FastBoot extends Activity {
         /** {@inheritDoc} 
          * @return */
         public boolean handleMessage(Message msg) {
-        	Log.e(TAG, "handleMessage begin in " + SystemClock.elapsedRealtime());
+            Log.e(TAG, "handleMessage begin in " + SystemClock.elapsedRealtime());
             switch (msg.what) {
-	            case SEND_AIRPLANE_MODE_BROADCAST:
-	    			Log.e(TAG, "Set airplane mode begin in " + SystemClock.elapsedRealtime() + ", airplane mode : " + msg.arg1);
-	    			if (Settings.System.getInt(getContentResolver(), Settings.System.AIRPLANE_MODE_ON, 0) == msg.arg1) {
-	    				sendBroadcastDone = true;
-	    				break;
-	    			}
-	    			Log.e(TAG, "Set airplane mode begin in**** " + SystemClock.elapsedRealtime() + ", airplane mode : " + msg.arg1);
-	    			Settings.System.putInt(getContentResolver(), Settings.System.AIRPLANE_MODE_ON, msg.arg1);
-	    			Intent intentAirplane = new Intent(Intent.ACTION_AIRPLANE_MODE_CHANGED);
-	    			intentAirplane.addFlags(Intent.FLAG_RECEIVER_REPLACE_PENDING);
-	    			intentAirplane.putExtra("state", msg.arg1 == 1);
-	    			sendOrderedBroadcast(intentAirplane, null, sendBroadcasResult, mHandler, 0, null, null);
-	                break;
-	            case SEND_BOOT_COMPLETED_BROADCAST:
-	        	    Intent intentBoot = new Intent(Intent.ACTION_BOOT_COMPLETED);
-	        		Log.e(TAG, "Send bootCompleted begin in " + SystemClock.elapsedRealtime());
-	        		sendOrderedBroadcast(intentBoot, null, sendBroadcasResult, mHandler, 0, null, null);
-	                break;
-	            default:
-	            	sendBroadcastDone = true;
-	            	return false;
-	        }
+                case SEND_AIRPLANE_MODE_BROADCAST:
+                    Log.e(TAG, "Set airplane mode begin in " + SystemClock.elapsedRealtime() + ", airplane mode : " + msg.arg1);
+                    if (Settings.System.getInt(getContentResolver(), Settings.System.AIRPLANE_MODE_ON, 0) == msg.arg1) {
+                        sendBroadcastDone = true;
+                        break;
+                    }
+                    Log.e(TAG, "Set airplane mode begin in**** " + SystemClock.elapsedRealtime() + ", airplane mode : " + msg.arg1);
+                    Settings.System.putInt(getContentResolver(), Settings.System.AIRPLANE_MODE_ON, msg.arg1);
+                    Intent intentAirplane = new Intent(Intent.ACTION_AIRPLANE_MODE_CHANGED);
+                    intentAirplane.addFlags(Intent.FLAG_RECEIVER_REPLACE_PENDING);
+                    intentAirplane.putExtra("state", msg.arg1 == 1);
+                    sendOrderedBroadcast(intentAirplane, null, sendBroadcasResult, mHandler, 0, null, null);
+                    break;
+                case SEND_BOOT_COMPLETED_BROADCAST:
+                    Intent intentBoot = new Intent(Intent.ACTION_BOOT_COMPLETED);
+                    Log.e(TAG, "Send bootCompleted begin in " + SystemClock.elapsedRealtime());
+                    sendOrderedBroadcast(intentBoot, null, sendBroadcasResult, mHandler, 0, null, null);
+                    break;
+                default:
+                    sendBroadcastDone = true;
+                    return false;
+            }
             return true;
         }
     };
-    
-	BroadcastReceiver sendBroadcasResult = new BroadcastReceiver() {
+
+    BroadcastReceiver sendBroadcasResult = new BroadcastReceiver() {
         @Override 
         public void onReceive(Context context, Intent intent) {
-        	Log.e(TAG, "Send Broadcast finish in " + SystemClock.elapsedRealtime());
-        	sendBroadcastDone = true;
+            Log.e(TAG, "Send Broadcast finish in " + SystemClock.elapsedRealtime());
+            sendBroadcastDone = true;
         }
     };
 
@@ -156,33 +159,34 @@ public class FastBoot extends Activity {
         powerOn = false;
 
         mPm = (PowerManager)getSystemService(Context.POWER_SERVICE);
-		if (mPm == null)
-			finish();
+        if (mPm == null) {
+            finish();
+        }
 
-		mActivityManager = (ActivityManager) getSystemService(Context.ACTIVITY_SERVICE);
-		if (mActivityManager == null)
-			finish();
-		
-	    mHandlerThread = new HandlerThread(TAG);
-	    mHandlerThread.start();
-	    mHandler = new Handler(mHandlerThread.getLooper(), mHandlerCallback);
+        mActivityManager = (ActivityManager) getSystemService(Context.ACTIVITY_SERVICE);
+        if (mActivityManager == null) {
+            finish();
+        }
+        mHandlerThread = new HandlerThread(TAG);
+        mHandlerThread.start();
+        mHandler = new Handler(mHandlerThread.getLooper(), mHandlerCallback);
     }
 
-	@Override
+    @Override
     public void onDestroy() {
-		super.onDestroy();
-	}
+        super.onDestroy();
+    }
 
     @Override
     public void onResume() {
         super.onResume();
 
         if (!powerOn) {
-        	Log.e(TAG, "onResume power off");
+            Log.e(TAG, "onResume power off");
             powerOffSystem();
         } else {
             Log.e(TAG, "onResume power on");
-        	powerOnSystem();
+            powerOnSystem();
         }
     }
 
@@ -193,91 +197,100 @@ public class FastBoot extends Activity {
     }
 
     private void powerOffSystem() {
-    	disableInputEvent(true);
-		shareFastBootState(true);
-		SystemProperties.set("ctl.start", "bootanim");
-		setAirplaneMode(true, true);
+        disableInputEvent(true);
+        shareFastBootState(true);
+        SystemProperties.set("ctl.start", "bootanim");
+        setAirplaneMode(true, true);
         KillProcess();
 
         mPm.goToSleep(SystemClock.uptimeMillis());
-	}
+    }
 
     private void powerOnSystem() {
         shareFastBootState(false);
         sendBootCompleted(true);
         setAirplaneMode(false, false);
-        SystemProperties.set("ctl.stop", "bootanim"); 
+        SystemProperties.set("ctl.stop", "bootanim");
         disableInputEvent(false);
         finish();
-	}
+    }
 
     private void KillProcess() {
         List<ActivityManager.RunningAppProcessInfo> appProcessList = null;
 
-        appProcessList = mActivityManager.getRunningAppProcesses();     
+        appProcessList = mActivityManager.getRunningAppProcesses();
 
         for (ActivityManager.RunningAppProcessInfo appProcessInfo : appProcessList) {
-        	int pid = appProcessInfo.pid;
-        	int uid = appProcessInfo.uid;
-        	String processName = appProcessInfo.processName;
+            int pid = appProcessInfo.pid;
+            int uid = appProcessInfo.uid;
+            String processName = appProcessInfo.processName;
 
-        	if (isKillableProcess(processName)) {
-        		//mActivityManager.killBackgroundProcesses(processName); 
-        		Log.e(TAG, "process " + processName + "will be killed");
-        		mActivityManager.forceStopPackage(processName);
-        	}
+            if (isKillableProcess(processName)) {
+                //mActivityManager.killBackgroundProcesses(processName);
+                Log.e(TAG, "process " + processName + "will be killed");
+                mActivityManager.forceStopPackage(processName);
+            }
         }
      }
 
     private boolean isKillableProcess(String packageName) {
-    	for (String processName : systemLevelProcess) {
-    		if (processName.equals(packageName))
-    			return false;
+        for (String processName : systemLevelProcess) {
+            if (processName.equals(packageName)) {
+                return false;
+            }
         }
-		String currentProcess = getApplicationInfo().processName;
-		if (currentProcess.equals(packageName))
-			return false;
+        String currentProcess = getApplicationInfo().processName;
+        if (currentProcess.equals(packageName)) {
+            return false;
+        }
 
-		return true;
-	}
+        // couldn't kill the live wallpaper process, if kill it, the system will set the wallpaper as the default.
+        WallpaperInfo info = WallpaperManager.getInstance(this).getWallpaperInfo();
+        if (info != null && !TextUtils.isEmpty(packageName)
+                && packageName.equals(info.getPackageName())) {
+            return false;
+        }
+        return true;
+    }
 
-	private void sendBootCompleted(boolean wait) {
-		synchronized (this) {
-			sendBroadcastDone = false;
-			//sendBroadcastThread.start();
-			mHandler.sendMessage( Message.obtain(mHandler, SEND_BOOT_COMPLETED_BROADCAST));
-			while (wait && !sendBroadcastDone) {
-				SystemClock.sleep(100);
-			}
-			sendBroadcastDone = false;
-		}
-	}
-   
-	private void setAirplaneMode(boolean on, boolean wait) {
-		synchronized (this) {
-			sendBroadcastDone = false;
-			//sendBroadcastThread.start();
-			mHandler.sendMessage( Message.obtain(mHandler, SEND_AIRPLANE_MODE_BROADCAST, on ? 1 : 0, 0));
-			while (wait && !sendBroadcastDone) {
-				SystemClock.sleep(100);
-			}
-			sendBroadcastDone = false;
-		}
-	}
+    private void sendBootCompleted(boolean wait) {
+        synchronized (this) {
+            sendBroadcastDone = false;
+            // sendBroadcastThread.start();
+            mHandler.sendMessage(Message.obtain(mHandler, SEND_BOOT_COMPLETED_BROADCAST));
+            while (wait && !sendBroadcastDone) {
+                SystemClock.sleep(100);
+            }
+            sendBroadcastDone = false;
+        }
+    }
 
-	private void shareFastBootState(boolean start) {
-    	FileOutputStream stateOutputStream;
-    	try {
-			stateOutputStream = new FileOutputStream("/sys/bus/platform/devices/fastboot/fastboot", true);
-        	if (start)
-				stateOutputStream.write(new byte[] {(byte)'1'});
-        	else
-				stateOutputStream.write(new byte[] {(byte)'0'});
-		} catch (Exception e ) {
-			Log.e(TAG, "Failed to set the fastboot state");
-		}
-	}
-	
+    private void setAirplaneMode(boolean on, boolean wait) {
+        synchronized (this) {
+            sendBroadcastDone = false;
+            // sendBroadcastThread.start();
+            mHandler.sendMessage(Message.obtain(mHandler, SEND_AIRPLANE_MODE_BROADCAST, on ? 1 : 0, 0));
+            while (wait && !sendBroadcastDone) {
+                SystemClock.sleep(100);
+            }
+            sendBroadcastDone = false;
+        }
+    }
+
+    private void shareFastBootState(boolean start) {
+        FileOutputStream stateOutputStream;
+        try {
+            stateOutputStream = new FileOutputStream("/sys/bus/platform/devices/fastboot/fastboot", true);
+            if (start) {
+                stateOutputStream.write(new byte[] {(byte)'1'});
+            } else {
+                stateOutputStream.write(new byte[] {(byte)'0'});
+            }
+        } catch (Exception e ) {
+            Log.e(TAG, "Failed to set the fastboot state");
+        }
+    }
+
     private void disableInputEvent( boolean on ) {
         Log.d( TAG, "setKeypadEnabled() : on = " + on);
 
