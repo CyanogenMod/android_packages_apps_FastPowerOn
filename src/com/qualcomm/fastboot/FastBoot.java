@@ -104,7 +104,6 @@ public class FastBoot extends Activity {
     String systemLevelProcess[] = {
         "android.process.acore",
         "android.process.media", 
-        "com.android.inputmethod.latin",
         "com.android.systemui",
         "sys.DeviceHealth",
         "system",
@@ -227,7 +226,7 @@ public class FastBoot extends Activity {
 
             if (isKillableProcess(processName)) {
                 //mActivityManager.killBackgroundProcesses(processName);
-                Log.e(TAG, "process " + processName + "will be killed");
+                Log.w(TAG, "process '" + processName + "' will be killed");
                 mActivityManager.forceStopPackage(processName);
             }
         }
@@ -248,6 +247,14 @@ public class FastBoot extends Activity {
         WallpaperInfo info = WallpaperManager.getInstance(this).getWallpaperInfo();
         if (info != null && !TextUtils.isEmpty(packageName)
                 && packageName.equals(info.getPackageName())) {
+            return false;
+        }
+
+        // couldn't kill the IME process.
+        String currentInputMethod = Settings.Secure.getString(getContentResolver(),
+                Settings.Secure.DEFAULT_INPUT_METHOD);
+        if (!TextUtils.isEmpty(currentInputMethod)
+                && currentInputMethod.startsWith(packageName)) {
             return false;
         }
         return true;
