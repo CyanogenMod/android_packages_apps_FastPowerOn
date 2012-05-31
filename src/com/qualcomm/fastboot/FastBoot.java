@@ -105,6 +105,7 @@ public class FastBoot extends Activity {
         "android.process.acore",
         "android.process.media", 
         "com.android.systemui",
+        "com.android.deskclock",
         "sys.DeviceHealth",
         "system",
     };
