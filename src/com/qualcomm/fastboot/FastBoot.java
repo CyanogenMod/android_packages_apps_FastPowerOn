@@ -101,6 +101,8 @@ public class FastBoot extends Activity {
     private Handler mHandler;
     //BroadcastResultReceiver sendBroadcasResult = new BroadcastResultReceiver();
     Thread sendBroadcastThread = null;
+    public static final String PRE_AIRPLANE_MODE = "PRE_AIRPLANE_MODE";
+
     String systemLevelProcess[] = {
         "android.process.acore",
         "android.process.media", 
@@ -114,24 +116,18 @@ public class FastBoot extends Activity {
         /** {@inheritDoc} 
          * @return */
         public boolean handleMessage(Message msg) {
-            Log.e(TAG, "handleMessage begin in " + SystemClock.elapsedRealtime());
+            Log.d(TAG, "handleMessage begin in " + SystemClock.elapsedRealtime());
             switch (msg.what) {
                 case SEND_AIRPLANE_MODE_BROADCAST:
-                    Log.e(TAG, "Set airplane mode begin in " + SystemClock.elapsedRealtime() + ", airplane mode : " + msg.arg1);
-                    if (Settings.System.getInt(getContentResolver(), Settings.System.AIRPLANE_MODE_ON, 0) == msg.arg1) {
-                        sendBroadcastDone = true;
-                        break;
-                    }
-                    Log.e(TAG, "Set airplane mode begin in**** " + SystemClock.elapsedRealtime() + ", airplane mode : " + msg.arg1);
-                    Settings.System.putInt(getContentResolver(), Settings.System.AIRPLANE_MODE_ON, msg.arg1);
+                    Log.d(TAG, "Set airplane mode begin in**** " + SystemClock.elapsedRealtime() + ", airplane mode : " + msg.arg1);
                     Intent intentAirplane = new Intent(Intent.ACTION_AIRPLANE_MODE_CHANGED);
                     intentAirplane.addFlags(Intent.FLAG_RECEIVER_REPLACE_PENDING);
                     intentAirplane.putExtra("state", msg.arg1 == 1);
                     sendOrderedBroadcast(intentAirplane, null, sendBroadcasResult, mHandler, 0, null, null);
                     break;
                 case SEND_BOOT_COMPLETED_BROADCAST:
+                    Log.d(TAG, "Send bootCompleted begin in " + SystemClock.elapsedRealtime());
                     Intent intentBoot = new Intent(Intent.ACTION_BOOT_COMPLETED);
-                    Log.e(TAG, "Send bootCompleted begin in " + SystemClock.elapsedRealtime());
                     sendOrderedBroadcast(intentBoot, null, sendBroadcasResult, mHandler, 0, null, null);
                     break;
                 default:
@@ -145,7 +141,7 @@ public class FastBoot extends Activity {
     BroadcastReceiver sendBroadcasResult = new BroadcastReceiver() {
         @Override 
         public void onReceive(Context context, Intent intent) {
-            Log.e(TAG, "Send Broadcast finish in " + SystemClock.elapsedRealtime());
+            Log.d(TAG, "Send Broadcast finish in " + SystemClock.elapsedRealtime());
             sendBroadcastDone = true;
         }
     };
@@ -155,7 +151,7 @@ public class FastBoot extends Activity {
         super.onCreate(icicle);
         setContentView(R.layout.connectivity);
 
-        Log.e(TAG, "onCreate");
+        Log.d(TAG, "onCreate");
         powerOn = false;
 
         mPm = (PowerManager)getSystemService(Context.POWER_SERVICE);
@@ -182,11 +178,11 @@ public class FastBoot extends Activity {
         super.onResume();
 
         if (!powerOn) {
-            Log.e(TAG, "onResume power off");
+            Log.d(TAG, "onResume power off");
             powerOffSystem();
         } else {
-            Log.e(TAG, "onResume power on");
-            powerOnSystem();
+            Log.d(TAG, "onResume power on");
+            powerOnSystem(this);
         }
     }
 
@@ -200,16 +196,16 @@ public class FastBoot extends Activity {
         disableInputEvent(true);
         shareFastBootState(true);
         SystemProperties.set("ctl.start", "bootanim");
-        setAirplaneMode(true, true);
+        enterAirplaneMode();
         KillProcess();
 
         mPm.goToSleep(SystemClock.uptimeMillis());
     }
 
-    private void powerOnSystem() {
+    private void powerOnSystem(Context context) {
         shareFastBootState(false);
         sendBootCompleted(true);
-        setAirplaneMode(false, false);
+        restoreAirplaneMode(context);
         SystemProperties.set("ctl.stop", "bootanim");
         disableInputEvent(false);
         finish();
@@ -227,7 +223,7 @@ public class FastBoot extends Activity {
 
             if (isKillableProcess(processName)) {
                 //mActivityManager.killBackgroundProcesses(processName);
-                Log.w(TAG, "process '" + processName + "' will be killed");
+                Log.d(TAG, "process '" + processName + "' will be killed");
                 mActivityManager.forceStopPackage(processName);
             }
         }
@@ -273,17 +269,40 @@ public class FastBoot extends Activity {
         }
     }
 
-    private void setAirplaneMode(boolean on, boolean wait) {
-        synchronized (this) {
-            sendBroadcastDone = false;
-            // sendBroadcastThread.start();
-            mHandler.sendMessage(Message.obtain(mHandler, SEND_AIRPLANE_MODE_BROADCAST, on ? 1 : 0, 0));
-            while (wait && !sendBroadcastDone) {
-                SystemClock.sleep(100);
-            }
-            sendBroadcastDone = false;
+    private void enterAirplaneMode() {
+        SharedPreferences mPreAirplaneMode = getSharedPreferences("preAirplaneMode", MODE_PRIVATE);
+        if (Settings.System.getInt(getContentResolver(), Settings.System.AIRPLANE_MODE_ON, 0) == 1) {
+            return;
         }
-    }
+
+        SharedPreferences.Editor editor = mPreAirplaneMode.edit();
+        editor.putInt(PRE_AIRPLANE_MODE, 0);
+        editor.commit();
+        Settings.System.putInt(getContentResolver(), Settings.System.AIRPLANE_MODE_ON, 1);
+
+        sendBroadcastDone = false;
+        mHandler.sendMessage( Message.obtain(mHandler, SEND_AIRPLANE_MODE_BROADCAST, 1, 0));
+        while (!sendBroadcastDone) {
+            SystemClock.sleep(100);
+        }
+        sendBroadcastDone = false;
+   }
+
+   public void restoreAirplaneMode(Context context) {
+        SharedPreferences mPreAirplaneMode = context.getSharedPreferences("preAirplaneMode", MODE_PRIVATE);
+        if (mPreAirplaneMode.getInt(PRE_AIRPLANE_MODE, -1) != 0)
+            return;
+        Log.d(TAG, "restore airplane mode to previous status");
+        Intent intentAirplane = new Intent(Intent.ACTION_AIRPLANE_MODE_CHANGED);
+        intentAirplane.addFlags(Intent.FLAG_RECEIVER_REPLACE_PENDING);
+        intentAirplane.putExtra("state", false);
+        context.sendBroadcast(intentAirplane);
+
+        SharedPreferences.Editor editor = mPreAirplaneMode.edit();
+        editor.putInt(PRE_AIRPLANE_MODE, -1);
+        editor.commit();
+        Settings.System.putInt(context.getContentResolver(), Settings.System.AIRPLANE_MODE_ON, 0);
+   }
 
     private void shareFastBootState(boolean start) {
         FileOutputStream stateOutputStream;

@@ -27,22 +27,38 @@
  * IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-package com.qualcomm.fastboot;
+package com.qualcomm.restore.airplanemode;
 
 import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
+import android.content.SharedPreferences;
+import android.provider.Settings;
 import android.util.Log;
 
-public class PowerOffBroadcastReceiver extends BroadcastReceiver{
-    public final String LOG_TAG = "PowerOffBroadcastReceiver";
+public class RestoreAirplaneModeReceiver extends BroadcastReceiver{
+    public final String LOG_TAG = "RestoreAirplaneModeReceiver";
     @Override
     public void onReceive(Context context, Intent intent) {
-        if (intent.getAction().equals(Intent.ACTION_FAST_BOOT_START)) {
-            Log.d(LOG_TAG, "receive Intent.ACTION_FAST_BOOT_START");
-            Intent powerOffIntent = new Intent(context, FastBoot.class);
-            powerOffIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-            context.startActivity(powerOffIntent);
+        if (intent.getAction().equals(Intent.ACTION_BOOT_COMPLETED)) {
+            Log.d(LOG_TAG, "receive Intent.ACTION_BOOT_COMPLETED");
+            try {
+                Context fastBootContext = context.createPackageContext("com.qualcomm.fastboot",
+                    Context.CONTEXT_INCLUDE_CODE | Context.CONTEXT_IGNORE_SECURITY);
+                if(fastBootContext != null) {
+                    Class fastBootClass = fastBootContext.getClassLoader().loadClass("com.qualcomm.fastboot.FastBoot");
+                    if (fastBootClass != null) {
+                        Object fastBootObj = fastBootClass.newInstance();
+                        fastBootClass.getMethod("restoreAirplaneMode", Context.class).invoke(fastBootObj, fastBootContext);
+                    } else {
+                        Log.e(LOG_TAG, "can`t get the class of fastboot");
+                    }
+                } else {
+                    Log.e(LOG_TAG, "can`t get the context of fastboot");
+                }
+            } catch (Exception e) {
+                e.printStackTrace();
+            }
         }
     }
 }

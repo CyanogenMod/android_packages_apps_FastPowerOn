@@ -5,11 +5,9 @@ LOCAL_MODULE_TAGS := optional
 
 LOCAL_SRC_FILES := $(call all-subdir-java-files)
 
-LOCAL_PACKAGE_NAME := FastBoot
+LOCAL_PACKAGE_NAME := RestoreAirplaneMode
 LOCAL_CERTIFICATE := platform
 
-include $(BUILD_PACKAGE)
+LOCAL_PROGUARD_FLAG_FILES := proguard.flags
 
-ifeq ($(strip $(LOCAL_PACKAGE_OVERRIDES)),)
-include $(call all-makefiles-under,$(LOCAL_PATH))
-endif
+include $(BUILD_PACKAGE)
