@@ -191,7 +191,10 @@ public class FastBoot extends Activity {
                     while(!getResumeState()) {
                         SystemClock.sleep(50);
                     }
-                    SystemClock.sleep(200);
+                    enableShowLogo(true);
+                    SystemClock.sleep(300);
+                    enableShowLogo(false);
+                    SystemClock.sleep(700);
                     Log.d(TAG, "fast power on");
                     powerOnSystem(mFastBoot);
                     Intent iFinish = new Intent("FinishActivity");
@@ -261,7 +264,6 @@ public class FastBoot extends Activity {
         }
 
         private void powerOffSystem() {
-            disableInputEvent(true);
             shareFastBootState(true);
             SystemProperties.set("ctl.start", "bootanim");
             enterAirplaneMode();
@@ -274,7 +276,6 @@ public class FastBoot extends Activity {
             shareFastBootState(false);
             sendBootCompleted(false);
             restoreAirplaneMode(context);
-            disableInputEvent(false);
             SystemProperties.set("ctl.stop", "bootanim");
         }
 
@@ -369,11 +370,9 @@ public class FastBoot extends Activity {
             }
         }
 
-        private void disableInputEvent( boolean on ) {
-            Log.d( TAG, "setKeypadEnabled() : on = " + on);
-
+        private void enableShowLogo( boolean on ) {
             String disableStr = (on ? "1" : "0" );
-            SystemProperties.set( "hw.input.disable" , disableStr );
+            SystemProperties.set( "hw.showlogo.enable" , disableStr );
         }
     }
 }
