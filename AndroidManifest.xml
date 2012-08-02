@@ -44,6 +44,7 @@
     <uses-permission android:name="android.permission.FORCE_STOP_PACKAGES"/>
     <uses-permission android:name="android.permission.GET_TASKS"/>
     <uses-permission android:name="android.permission.VIBRATE"/>
+    <uses-permission android:name="android.permission.SHUTDOWN"/>
 
     <application android:label="FastBoot">
         <service android:name=".FastBoot$localSerice" android:stopWithTask="true" />

@@ -43,6 +43,7 @@ import android.os.HandlerThread;
 import android.os.Message;
 import android.os.IBinder;
 import android.os.Parcel;
+import android.os.Power;
 import android.os.Process;
 import android.os.PowerManager;
 import android.os.PowerManager.WakeLock;
@@ -50,6 +51,7 @@ import android.os.ServiceManager;
 import android.os.ServiceManagerNative;
 import android.os.SystemProperties;
 import android.os.SystemClock;
+import android.os.UEventObserver;
 import android.os.Vibrator;
 import android.provider.Settings;
 import android.text.TextUtils;
@@ -153,6 +155,7 @@ public class FastBoot extends Activity {
         }
     };
 
+
     public static class localSerice extends Service {
         private PowerManager mPm = null;
         private static boolean powerOn = false;
@@ -187,18 +190,7 @@ public class FastBoot extends Activity {
                 public void run(){
                     Log.d(TAG, "fast power off");
                     powerOffSystem();
-                    changeResumeState();
-                    while(!getResumeState()) {
-                        SystemClock.sleep(50);
-                    }
-                    enableShowLogo(true);
-                    SystemClock.sleep(300);
-                    enableShowLogo(false);
-                    SystemClock.sleep(700);
-                    Log.d(TAG, "fast power on");
-                    powerOnSystem(mFastBoot);
-                    Intent iFinish = new Intent("FinishActivity");
-                    sendBroadcast(iFinish);
+                    mFastBootMsgObserver.startObserving("DEVPATH=/devices/platform/fastboot");
                 }
             }.start();
         }
@@ -242,26 +234,30 @@ public class FastBoot extends Activity {
             }
         };
 
-        private boolean getResumeState() {
-            FileInputStream stateInputStream;
-            try {
-                stateInputStream = new FileInputStream("/sys/bus/platform/devices/fastboot/resume");
-                return stateInputStream.read() == '1';
-            } catch (Exception e ) {
-                Log.e(TAG, "Failed to get the resume state");
+        private UEventObserver mFastBootMsgObserver = new UEventObserver() {
+            @Override
+            public void onUEvent(UEventObserver.UEvent event) {
+                String msg = event.get("FASTBOOT_MSG");
+                if ("usb".equals(msg)) {
+                    Log.e(TAG, "observer fastboot usb event, power off the phone");
+                    mFastBootMsgObserver.stopObserving();
+                    Intent intent = new Intent(Intent.ACTION_REQUEST_SHUTDOWN);
+                    intent.putExtra(Intent.EXTRA_KEY_CONFIRM, false);
+                    intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                    mFastBoot.startActivity(intent);
+                } else if ("resume".equals(msg)){
+                    Log.e(TAG, "observer fastboot resume event, fast power on");
+                    mFastBootMsgObserver.stopObserving();
+                    enableShowLogo(true);
+                    SystemClock.sleep(300);
+                    enableShowLogo(false);
+                    SystemClock.sleep(700);
+                    powerOnSystem(mFastBoot);
+                    Intent iFinish = new Intent("FinishActivity");
+                    sendBroadcast(iFinish);
+                }
             }
-            return false;
-        }
-
-        private void changeResumeState() {
-            FileOutputStream stateOutputStream;
-            try {
-                stateOutputStream = new FileOutputStream("/sys/bus/platform/devices/fastboot/resume", true);
-                stateOutputStream.write(new byte[] {(byte)'0'});
-            } catch (Exception e ) {
-                Log.e(TAG, "Failed to set the resume state");
-            }
-        }
+        };
 
         private void powerOffSystem() {
             shareFastBootState(true);
