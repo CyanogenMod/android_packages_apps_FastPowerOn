@@ -43,7 +43,6 @@ import android.os.HandlerThread;
 import android.os.Message;
 import android.os.IBinder;
 import android.os.Parcel;
-import android.os.Power;
 import android.os.Process;
 import android.os.PowerManager;
 import android.os.PowerManager.WakeLock;
