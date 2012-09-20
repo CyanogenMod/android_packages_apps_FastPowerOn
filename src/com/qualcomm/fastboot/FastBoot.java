@@ -130,6 +130,8 @@ public class FastBoot extends Activity {
         if (mPreAirplaneMode.getInt(PRE_AIRPLANE_MODE, -1) != 0)
             return;
         Log.d(TAG, "restore airplane mode to previous status");
+        // Should put the value to the database first, then send broadcast using action "ACTION_AIRPLANE_MODE_CHANGED"
+        Settings.System.putInt(context.getContentResolver(), Settings.System.AIRPLANE_MODE_ON, 0);
         Intent intentAirplane = new Intent(Intent.ACTION_AIRPLANE_MODE_CHANGED);
         intentAirplane.addFlags(Intent.FLAG_RECEIVER_REPLACE_PENDING);
         intentAirplane.putExtra("state", false);
@@ -138,7 +140,6 @@ public class FastBoot extends Activity {
         SharedPreferences.Editor editor = mPreAirplaneMode.edit();
         editor.putInt(PRE_AIRPLANE_MODE, -1);
         editor.commit();
-        Settings.System.putInt(context.getContentResolver(), Settings.System.AIRPLANE_MODE_ON, 0);
     }
 
     protected BroadcastReceiver mCommunicateReceiver = new BroadcastReceiver() {
