@@ -240,6 +240,7 @@ public class FastBoot extends Activity {
                 String msg = event.get("FASTBOOT_MSG");
                 if ("usb".equals(msg)) {
                     Log.e(TAG, "observer fastboot usb event, power off the phone");
+                    shareFastBootState(true);
                     mFastBootMsgObserver.stopObserving();
                     Intent intent = new Intent(Intent.ACTION_REQUEST_SHUTDOWN);
                     intent.putExtra(Intent.EXTRA_KEY_CONFIRM, false);
