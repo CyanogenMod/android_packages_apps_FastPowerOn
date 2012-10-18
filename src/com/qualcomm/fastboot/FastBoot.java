@@ -1,7 +1,7 @@
 /* //device/apps/Settings/src/com/android/settings/Keyguard.java
 **
 ** Copyright 2006, The Android Open Source Project
-** Copyright (c) 2012, Code Aurora Forum. All rights reserved.
+** Copyright (c) 2012, The Linux Foundation. All Rights Reserved.
 **
 ** Licensed under the Apache License, Version 2.0 (the "License");
 ** you may not use this file except in compliance with the License.
@@ -166,10 +166,13 @@ public class FastBoot extends Activity {
         private HandlerThread mHandlerThread;
         private Handler mHandler;
         Thread sendBroadcastThread = null;
+        //add launcher in protected list
         String systemLevelProcess[] = {
             "android.process.acore",
             "android.process.media",
             "com.android.systemui",
+            "com.android.launcher",
+            "com.android.launcher2",
             "com.android.deskclock",
             "sys.DeviceHealth",
             "system",
