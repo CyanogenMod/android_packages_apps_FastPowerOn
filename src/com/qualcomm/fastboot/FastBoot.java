@@ -1,4 +1,4 @@
-/* //device/apps/Settings/src/com/android/settings/Keyguard.java
+/* packages/apps/FastPowerOn/src/com/qualcomm/fastboot/FastBoot.java
 **
 ** Copyright 2006, The Android Open Source Project
 ** Copyright (c) 2012, The Linux Foundation. All Rights Reserved.
@@ -268,7 +268,7 @@ public class FastBoot extends Activity {
             SystemProperties.set("ctl.start", "bootanim");
             enterAirplaneMode();
             KillProcess();
-
+            SystemClock.sleep(1000);
             mPm.goToSleep(SystemClock.uptimeMillis());
         }
 
