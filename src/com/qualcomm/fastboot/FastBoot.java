@@ -91,6 +91,8 @@ import org.apache.http.params.HttpParams;
 import org.apache.http.HttpResponse;
 import org.apache.http.impl.client.DefaultHttpClient;
 
+import android.media.AudioManager;
+
 public class FastBoot extends Activity {
     private static final String TAG = "FastBoot";
     private static FastBoot mFastBoot;
@@ -264,6 +266,9 @@ public class FastBoot extends Activity {
         };
 
         private void powerOffSystem() {
+            //notify music application to pause music before kill the application
+            sendBecomingNoisyIntent();
+
             shareFastBootState(true);
             SystemProperties.set("ctl.start", "bootanim");
             enterAirplaneMode();
@@ -277,6 +282,11 @@ public class FastBoot extends Activity {
             sendBootCompleted(false);
             restoreAirplaneMode(context);
             SystemProperties.set("ctl.stop", "bootanim");
+        }
+
+        //send broadcast to music application to pause music
+        private void sendBecomingNoisyIntent() {
+            sendBroadcast(new Intent(AudioManager.ACTION_AUDIO_BECOMING_NOISY));
         }
 
         private void KillProcess() {
