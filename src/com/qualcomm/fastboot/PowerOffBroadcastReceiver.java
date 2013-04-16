@@ -39,10 +39,20 @@ public class PowerOffBroadcastReceiver extends BroadcastReceiver{
     @Override
     public void onReceive(Context context, Intent intent) {
         if (intent.getAction().equals(Intent.ACTION_FAST_BOOT_START)) {
-            Log.d(LOG_TAG, "receive Intent.ACTION_FAST_BOOT_START");
-            Intent powerOffIntent = new Intent(context, FastBoot.class);
-            powerOffIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-            context.startActivity(powerOffIntent);
+            Boolean state = intent.getBooleanExtra("state", true);
+            if (state == true) {
+                // Start fast power on app and fake turn off
+                Log.d(LOG_TAG, "receive Intent.ACTION_FAST_BOOT_START, " +
+                                "Power Off");
+                Intent powerOffIntent = new Intent(context, FastBoot.class);
+                powerOffIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                context.startActivity(powerOffIntent);
+            } else {
+                Log.d(LOG_TAG, "receive Intent.ACTION_FAST_BOOT_START, " +
+                                "Power On");
+                Intent iFinish = new Intent(FastBoot.KEY_INTERNAL_BROADCAST_POWER_ON);
+                context.sendBroadcast(iFinish);
+            }
         }
     }
 }

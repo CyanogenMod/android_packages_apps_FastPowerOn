@@ -97,7 +97,21 @@ public class FastBoot extends Activity {
     private static final String TAG = "FastBoot";
     private static FastBoot mFastBoot;
     private Context mFastBootContext;
-    private static final String PRE_AIRPLANE_MODE = "PRE_AIRPLANE_MODE";
+
+    // shared pref name to check what airplane mode was before we modify it, in
+    // order to restore it accurately after we return.
+    private static final String SHARED_PREF_NAME_PRE_AIRPLANE = "preAirplaneMode";
+    // shared pref key to check what airplane mode was before we modify it, in
+    // order to restore it accurately after we return.
+    private static final String SHARED_PREF_KEY_PRE_AIRPLANE = "PRE_AIRPLANE_MODE";
+    // key for internal broadcast transactions - communication between
+    // localservice and FastBoot ( FPO ) class.
+    private static final String KEY_INTERNAL_BROADCAST_FINISH = "FinishActivity";
+
+    // key for internal broadcasts between PowerOffBroadcastReceiver and
+    // localservice.
+    public static final String KEY_INTERNAL_BROADCAST_POWER_ON =
+                                            "fastPowerOnResumeFromDeepSleep";
 
     @Override
     public void onCreate(Bundle icicle) {
@@ -107,7 +121,7 @@ public class FastBoot extends Activity {
         Log.d(TAG, "Activity onCreate");
         mFastBoot = this;
         IntentFilter finishFilter = new IntentFilter();
-        finishFilter.addAction("FinishActivity");
+        finishFilter.addAction(KEY_INTERNAL_BROADCAST_FINISH);
         registerReceiver(mCommunicateReceiver, finishFilter);
         startService(new Intent(this, localSerice.class));
     }
@@ -115,6 +129,9 @@ public class FastBoot extends Activity {
     @Override
     public void onDestroy() {
         super.onDestroy();
+        // Ensure that our process is killed. Android keeps processes in memory
+        // until it decides. We need exit for sure.
+        android.os.Process.killProcess(android.os.Process.myPid());
     }
 
     @Override
@@ -128,19 +145,19 @@ public class FastBoot extends Activity {
     }
 
     public static void restoreAirplaneMode(Context context) {
-        SharedPreferences mPreAirplaneMode = context.getSharedPreferences("preAirplaneMode", MODE_PRIVATE);
-        if (mPreAirplaneMode.getInt(PRE_AIRPLANE_MODE, -1) != 0)
+        SharedPreferences mPreAirplaneMode = context.getSharedPreferences(SHARED_PREF_NAME_PRE_AIRPLANE, MODE_PRIVATE);
+        if (mPreAirplaneMode.getInt(SHARED_PREF_KEY_PRE_AIRPLANE, -1) != 0)
             return;
         Log.d(TAG, "restore airplane mode to previous status");
         // Should put the value to the database first, then send broadcast using action "ACTION_AIRPLANE_MODE_CHANGED"
-        Settings.System.putInt(context.getContentResolver(), Settings.System.AIRPLANE_MODE_ON, 0);
+        Settings.Global.putInt(context.getContentResolver(), Settings.Global.AIRPLANE_MODE_ON, 0);
         Intent intentAirplane = new Intent(Intent.ACTION_AIRPLANE_MODE_CHANGED);
         intentAirplane.addFlags(Intent.FLAG_RECEIVER_REPLACE_PENDING);
         intentAirplane.putExtra("state", false);
         context.sendBroadcast(intentAirplane);
 
         SharedPreferences.Editor editor = mPreAirplaneMode.edit();
-        editor.putInt(PRE_AIRPLANE_MODE, -1);
+        editor.putInt(SHARED_PREF_KEY_PRE_AIRPLANE, -1);
         editor.commit();
     }
 
@@ -149,7 +166,7 @@ public class FastBoot extends Activity {
         public void onReceive(Context context, Intent intent) {
             // TODO Auto-generated method stub
             String action = intent.getAction();
-            if (action.equals("FinishActivity")) {
+            if (action.equals(KEY_INTERNAL_BROADCAST_FINISH)) {
                 unregisterReceiver(mCommunicateReceiver);
                 stopService(new Intent(FastBoot.this, localSerice.class));
                 mFastBoot.finish();
@@ -168,7 +185,6 @@ public class FastBoot extends Activity {
         private HandlerThread mHandlerThread;
         private Handler mHandler;
         Thread sendBroadcastThread = null;
-        //add launcher in protected list
         String systemLevelProcess[] = {
             "android.process.acore",
             "android.process.media",
@@ -195,7 +211,9 @@ public class FastBoot extends Activity {
                 public void run(){
                     Log.d(TAG, "fast power off");
                     powerOffSystem();
-                    mFastBootMsgObserver.startObserving("DEVPATH=/devices/platform/fastboot");
+                    IntentFilter powerButtonFilter = new IntentFilter();
+                    powerButtonFilter.addAction(KEY_INTERNAL_BROADCAST_POWER_ON);
+                    registerReceiver(mPowerOffReceiver, powerButtonFilter);
                 }
             }.start();
         }
@@ -239,37 +257,26 @@ public class FastBoot extends Activity {
             }
         };
 
-        private UEventObserver mFastBootMsgObserver = new UEventObserver() {
-            @Override
-            public void onUEvent(UEventObserver.UEvent event) {
-                String msg = event.get("FASTBOOT_MSG");
-                if ("usb".equals(msg)) {
-                    Log.e(TAG, "observer fastboot usb event, power off the phone");
-                    shareFastBootState(true);
-                    mFastBootMsgObserver.stopObserving();
-                    Intent intent = new Intent(Intent.ACTION_REQUEST_SHUTDOWN);
-                    intent.putExtra(Intent.EXTRA_KEY_CONFIRM, false);
-                    intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-                    mFastBoot.startActivity(intent);
-                } else if ("resume".equals(msg)){
-                    Log.e(TAG, "observer fastboot resume event, fast power on");
-                    mFastBootMsgObserver.stopObserving();
-                    enableShowLogo(true);
-                    SystemClock.sleep(300);
-                    enableShowLogo(false);
-                    SystemClock.sleep(700);
-                    powerOnSystem(mFastBoot);
-                    Intent iFinish = new Intent("FinishActivity");
-                    sendBroadcast(iFinish);
-                }
+        public void onPowerEvent(String msg) {
+            // TODO: To be done
+            if ("usb".equals(msg)) {
+                Log.e(TAG, "observer fastboot usb event, power off the phone");
+                Intent intent = new Intent(Intent.ACTION_REQUEST_SHUTDOWN);
+                intent.putExtra(Intent.EXTRA_KEY_CONFIRM, false);
+                intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                mFastBoot.startActivity(intent);
+            } else if ("resume".equals(msg)){
+                Log.e(TAG, "observer fastboot resume event, fast power on");
+                powerOnSystem(mFastBoot);
+                Intent iFinish = new Intent(KEY_INTERNAL_BROADCAST_FINISH);
+                sendBroadcast(iFinish);
             }
-        };
+        }
 
         private void powerOffSystem() {
             //notify music application to pause music before kill the application
             sendBecomingNoisyIntent();
-
-            shareFastBootState(true);
+            SystemProperties.set("service.bootanim.exit", "0");
             SystemProperties.set("ctl.start", "bootanim");
             enterAirplaneMode();
             KillProcess();
@@ -278,10 +285,18 @@ public class FastBoot extends Activity {
         }
 
         private void powerOnSystem(Context context) {
-            shareFastBootState(false);
-            sendBootCompleted(false);
-            restoreAirplaneMode(context);
+            PowerManager.WakeLock wl = mPm.newWakeLock(
+                                        PowerManager.SCREEN_BRIGHT_WAKE_LOCK|
+                                        PowerManager.ACQUIRE_CAUSES_WAKEUP,
+                                        mFastBoot.getClass().getName());
+            SystemProperties.set("service.bootanim.exit", "0");
+            SystemProperties.set("ctl.start", "bootanim");
+            wl.acquire();
+            SystemClock.sleep(5000);
             SystemProperties.set("ctl.stop", "bootanim");
+            mPm.wakeUp(SystemClock.uptimeMillis());
+            restoreAirplaneMode(context);
+            wl.release();
         }
 
         //send broadcast to music application to pause music
@@ -338,7 +353,6 @@ public class FastBoot extends Activity {
         private void sendBootCompleted(boolean wait) {
             synchronized (this) {
                 sendBroadcastDone = false;
-                // sendBroadcastThread.start();
                 mHandler.sendMessage(Message.obtain(mHandler, SEND_BOOT_COMPLETED_BROADCAST));
                 while (wait && !sendBroadcastDone) {
                     SystemClock.sleep(100);
@@ -348,15 +362,15 @@ public class FastBoot extends Activity {
         }
 
         private void enterAirplaneMode() {
-            SharedPreferences mPreAirplaneMode = getSharedPreferences("preAirplaneMode", MODE_PRIVATE);
-            if (Settings.System.getInt(getContentResolver(), Settings.System.AIRPLANE_MODE_ON, 0) == 1) {
+            SharedPreferences mPreAirplaneMode = getSharedPreferences(SHARED_PREF_NAME_PRE_AIRPLANE, MODE_PRIVATE);
+            if (Settings.Global.getInt(getContentResolver(), Settings.Global.AIRPLANE_MODE_ON, 0) == 1) {
                 return;
             }
 
             SharedPreferences.Editor editor = mPreAirplaneMode.edit();
-            editor.putInt(PRE_AIRPLANE_MODE, 0);
+            editor.putInt(SHARED_PREF_KEY_PRE_AIRPLANE, 0);
             editor.commit();
-            Settings.System.putInt(getContentResolver(), Settings.System.AIRPLANE_MODE_ON, 1);
+            Settings.Global.putInt(getContentResolver(), Settings.Global.AIRPLANE_MODE_ON, 1);
 
             sendBroadcastDone = false;
             mHandler.sendMessage( Message.obtain(mHandler, SEND_AIRPLANE_MODE_BROADCAST, 1, 0));
@@ -366,23 +380,20 @@ public class FastBoot extends Activity {
             sendBroadcastDone = false;
         }
 
-        private void shareFastBootState(boolean start) {
-            FileOutputStream stateOutputStream;
-            try {
-                stateOutputStream = new FileOutputStream("/sys/bus/platform/devices/fastboot/fastboot", true);
-                if (start) {
-                    stateOutputStream.write(new byte[] {(byte)'1'});
-                } else {
-                    stateOutputStream.write(new byte[] {(byte)'0'});
-                }
-            } catch (Exception e ) {
-                Log.e(TAG, "Failed to set the fastboot state");
-            }
-        }
-
         private void enableShowLogo( boolean on ) {
             String disableStr = (on ? "1" : "0" );
             SystemProperties.set( "hw.showlogo.enable" , disableStr );
         }
+
+        protected BroadcastReceiver mPowerOffReceiver = new BroadcastReceiver() {
+            @Override
+            public void onReceive(Context context, Intent intent) {
+                String action = intent.getAction();
+                if (action.equals(KEY_INTERNAL_BROADCAST_POWER_ON)) {
+                    unregisterReceiver(mPowerOffReceiver);
+                    onPowerEvent("resume");
+                }
+            }
+        };
     }
 }

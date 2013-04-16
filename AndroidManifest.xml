@@ -53,7 +53,8 @@
                 <action android:name="android.intent.action.MAIN" />
             </intent-filter>
         </activity>
-        <receiver android:name="PowerOffBroadcastReceiver">
+	<receiver android:name="PowerOffBroadcastReceiver"
+		android:permission="android.permission.SHUTDOWN">
             <intent-filter>
                 <action android:name="android.intent.action.FAST_BOOT_START" ></action>
             </intent-filter>        
