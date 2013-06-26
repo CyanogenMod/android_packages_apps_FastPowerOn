@@ -112,6 +112,9 @@ public class FastBoot extends Activity {
     // localservice.
     public static final String KEY_INTERNAL_BROADCAST_POWER_ON =
                                             "fastPowerOnResumeFromDeepSleep";
+    // path for usb device
+    private static final String USB_STATE_MATCH =
+                "DEVPATH=/devices/virtual/android_usb/android0";
 
     @Override
     public void onCreate(Bundle icicle) {
@@ -169,7 +172,8 @@ public class FastBoot extends Activity {
             if (action.equals(KEY_INTERNAL_BROADCAST_FINISH)) {
                 unregisterReceiver(mCommunicateReceiver);
                 stopService(new Intent(FastBoot.this, localSerice.class));
-                mFastBoot.finish();
+                if (mFastBoot!=null)
+                    mFastBoot.finish();
             }
         }
     };
@@ -205,6 +209,7 @@ public class FastBoot extends Activity {
             mHandlerThread = new HandlerThread(TAG);
             mHandlerThread.start();
             mHandler = new Handler(mHandlerThread.getLooper(), mHandlerCallback);
+            mUEventObserver.startObserving(USB_STATE_MATCH);
 
             new Thread() {
                 @Override
@@ -293,7 +298,7 @@ public class FastBoot extends Activity {
             SystemProperties.set("ctl.start", "bootanim");
             wl.acquire();
             SystemClock.sleep(5000);
-            SystemProperties.set("ctl.stop", "bootanim");
+            SystemProperties.set("service.bootanim.exit", "1");
             mPm.wakeUp(SystemClock.uptimeMillis());
             restoreAirplaneMode(context);
             wl.release();
@@ -392,6 +397,20 @@ public class FastBoot extends Activity {
                 if (action.equals(KEY_INTERNAL_BROADCAST_POWER_ON)) {
                     unregisterReceiver(mPowerOffReceiver);
                     onPowerEvent("resume");
+                }
+            }
+        };
+
+        // Listens for uevent messages from the kernel to monitor the USB state
+        private final UEventObserver mUEventObserver = new UEventObserver() {
+            @Override
+            public void onUEvent(UEventObserver.UEvent event) {
+                String state = event.get("USB_STATE");
+                if (state != null) {
+                    if ("CONNECTED".equals(state)) {
+                        unregisterReceiver(mPowerOffReceiver);
+                        onPowerEvent("resume");
+                    }
                 }
             }
         };
