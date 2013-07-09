@@ -24,12 +24,16 @@ import android.app.ActivityManager.RunningServiceInfo;
 import android.app.ActivityManager.RunningTaskInfo;
 import android.app.ActivityManager.RunningServiceInfo;
 import android.app.AlarmManager;
+import android.app.AlertDialog;
+import android.app.Dialog;
 import android.app.PendingIntent;
+import android.app.ProgressDialog;
 import android.app.Service;
 import android.app.WallpaperInfo;
 import android.app.WallpaperManager;
 import android.content.BroadcastReceiver;
 import android.content.Context;
+import android.content.DialogInterface;
 import android.content.Intent;
 import android.content.IntentFilter;
 import android.content.SharedPreferences;
@@ -97,6 +101,9 @@ public class FastBoot extends Activity {
     private static final String TAG = "FastBoot";
     private static FastBoot mFastBoot;
     private Context mFastBootContext;
+    private static AlertDialog sConfirmDialog;
+    private static CloseDialogReceiver closer;
+    private boolean mDialogOkPressed = false;
 
     // shared pref name to check what airplane mode was before we modify it, in
     // order to restore it accurately after we return.
@@ -119,19 +126,39 @@ public class FastBoot extends Activity {
     @Override
     public void onCreate(Bundle icicle) {
         super.onCreate(icicle);
-        setContentView(R.layout.connectivity);
-
-        Log.d(TAG, "Activity onCreate");
         mFastBoot = this;
-        IntentFilter finishFilter = new IntentFilter();
-        finishFilter.addAction(KEY_INTERNAL_BROADCAST_FINISH);
-        registerReceiver(mCommunicateReceiver, finishFilter);
-        startService(new Intent(this, localSerice.class));
+        closer = new CloseDialogReceiver(
+                getApplicationContext());
+        if (sConfirmDialog != null) {
+            sConfirmDialog.dismiss();
+        }
+        sConfirmDialog = new AlertDialog.Builder(getApplicationContext())
+            .setTitle(com.android.internal.R.string.power_off)
+            .setMessage(com.android.internal.R.string.shutdown_confirm)
+            .setPositiveButton(com.android.internal.R.string.yes, new DialogInterface.OnClickListener() {
+                public void onClick(DialogInterface dialog, int which) {
+                    beginFastShutDown();
+                }
+            })
+            .setNegativeButton(com.android.internal.R.string.no,  new DialogInterface.OnClickListener() {
+                public void onClick(DialogInterface dialog, int which) {
+                            finish();
+                }
+            })
+            .create();
+
+        closer.dialog = sConfirmDialog;
+        sConfirmDialog.setOnDismissListener(closer);
+        sConfirmDialog.setOnCancelListener(closer);
+        sConfirmDialog.getWindow().setType(WindowManager.LayoutParams.TYPE_KEYGUARD_DIALOG);
+        sConfirmDialog.show();
     }
 
     @Override
     public void onDestroy() {
         super.onDestroy();
+        closer = null;
+        sConfirmDialog = null;
         // Ensure that our process is killed. Android keeps processes in memory
         // until it decides. We need exit for sure.
         android.os.Process.killProcess(android.os.Process.myPid());
@@ -164,6 +191,13 @@ public class FastBoot extends Activity {
         editor.commit();
     }
 
+    private void beginFastShutDown() {
+        IntentFilter finishFilter = new IntentFilter();
+        finishFilter.addAction(KEY_INTERNAL_BROADCAST_FINISH);
+        registerReceiver(mCommunicateReceiver, finishFilter);
+        startService(new Intent(mFastBoot, localSerice.class));
+    }
+
     protected BroadcastReceiver mCommunicateReceiver = new BroadcastReceiver() {
         @Override
         public void onReceive(Context context, Intent intent) {
@@ -172,12 +206,40 @@ public class FastBoot extends Activity {
             if (action.equals(KEY_INTERNAL_BROADCAST_FINISH)) {
                 unregisterReceiver(mCommunicateReceiver);
                 stopService(new Intent(FastBoot.this, localSerice.class));
-                if (mFastBoot!=null)
+                if (mFastBoot!=null) {
                     mFastBoot.finish();
+                }
             }
         }
     };
 
+    private static class CloseDialogReceiver extends BroadcastReceiver
+            implements DialogInterface.OnDismissListener, DialogInterface.OnCancelListener{
+        private Context mContext;
+        public Dialog dialog;
+
+        CloseDialogReceiver(Context context) {
+            mContext = context;
+            IntentFilter filter = new IntentFilter(Intent.ACTION_CLOSE_SYSTEM_DIALOGS);
+            context.registerReceiver(this, filter);
+        }
+
+        @Override
+        public void onReceive(Context context, Intent intent) {
+            dialog.cancel();
+            Log.i(TAG, "CloseDialogReceiver onReceive()");
+        }
+
+        public void onDismiss(DialogInterface unused) {
+            Log.i(TAG, "CloseDialogReceiver onDismiss()");
+            mContext.unregisterReceiver(this);
+        }
+
+        public void onCancel(DialogInterface dialog) {
+            Log.i(TAG, "CloseDialogReceiver onCancel()");
+            mFastBoot.finish();
+        }
+    }
 
     public static class localSerice extends Service {
         private PowerManager mPm = null;
@@ -189,6 +251,7 @@ public class FastBoot extends Activity {
         private HandlerThread mHandlerThread;
         private Handler mHandler;
         Thread sendBroadcastThread = null;
+        ProgressDialog pd = null;
         String systemLevelProcess[] = {
             "android.process.acore",
             "android.process.media",
@@ -203,7 +266,6 @@ public class FastBoot extends Activity {
         @Override
         public void onCreate() {
             super.onCreate();
-            Log.d(TAG, "Activity onCreate");
             mPm = (PowerManager)getSystemService(Context.POWER_SERVICE);
             mActivityManager = (ActivityManager) getSystemService(Context.ACTIVITY_SERVICE);
             mHandlerThread = new HandlerThread(TAG);
@@ -281,15 +343,29 @@ public class FastBoot extends Activity {
         private void powerOffSystem() {
             //notify music application to pause music before kill the application
             sendBecomingNoisyIntent();
-            SystemProperties.set("service.bootanim.exit", "0");
-            SystemProperties.set("ctl.start", "bootanim");
+            mFastBoot.runOnUiThread(new Runnable() {
+                public void run() {
+                    showShutDownProgress();
+                }
+            });
             enterAirplaneMode();
             KillProcess();
             SystemClock.sleep(1000);
             mPm.goToSleep(SystemClock.uptimeMillis());
+            mFastBoot.runOnUiThread(new Runnable() {
+                public void run() {
+                    hideShutDownProgress();
+                }
+            });
+            // Sleep a little more
+            SystemClock.sleep(500);
+            //Start bootanim. Shold be ready when device resumes from sleep...
+            SystemProperties.set("service.bootanim.exit", "0");
+            SystemProperties.set("ctl.start", "bootanim");
         }
 
         private void powerOnSystem(Context context) {
+            // TODO: Sometimes mPm will be null. Fix this. Catch ex.
             PowerManager.WakeLock wl = mPm.newWakeLock(
                                         PowerManager.SCREEN_BRIGHT_WAKE_LOCK|
                                         PowerManager.ACQUIRE_CAUSES_WAKEUP,
@@ -390,12 +466,31 @@ public class FastBoot extends Activity {
             SystemProperties.set( "hw.showlogo.enable" , disableStr );
         }
 
+        private void showShutDownProgress() {
+            // throw up an indeterminate system dialog to indicate radio is
+            // shutting down.
+            if (pd==null)
+                pd = new ProgressDialog(this);
+            pd.setTitle(this.getText(com.android.internal.R.string.power_off));
+            pd.setMessage(this.getText(com.android.internal.R.string.shutdown_progress));
+            pd.setIndeterminate(true);
+            pd.setCancelable(false);
+            pd.getWindow().setType(WindowManager.LayoutParams.TYPE_KEYGUARD_DIALOG);
+            pd.show();
+        }
+
+        private void hideShutDownProgress() {
+            pd.hide();
+            pd.dismiss();
+        }
+
         protected BroadcastReceiver mPowerOffReceiver = new BroadcastReceiver() {
             @Override
             public void onReceive(Context context, Intent intent) {
                 String action = intent.getAction();
                 if (action.equals(KEY_INTERNAL_BROADCAST_POWER_ON)) {
                     unregisterReceiver(mPowerOffReceiver);
+                    mUEventObserver.stopObserving();
                     onPowerEvent("resume");
                 }
             }
@@ -408,6 +503,7 @@ public class FastBoot extends Activity {
                 String state = event.get("USB_STATE");
                 if (state != null) {
                     if ("CONNECTED".equals(state)) {
+                        mUEventObserver.stopObserving();
                         unregisterReceiver(mPowerOffReceiver);
                         onPowerEvent("resume");
                     }

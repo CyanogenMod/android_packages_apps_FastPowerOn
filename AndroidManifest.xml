@@ -48,7 +48,9 @@
 
     <application android:label="FastBoot">
         <service android:name=".FastBoot$localSerice" android:stopWithTask="true" />
-        <activity android:name="FastBoot" android:theme="@android:style/Theme.NoTitleBar.Fullscreen" android:label="FastBoot" android:screenOrientation="portrait">
+        <activity android:name="FastBoot"
+                  android:theme="@android:style/Theme.Translucent.NoTitleBar" android:label="FastBoot"
+                  android:screenOrientation="portrait">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
             </intent-filter>
