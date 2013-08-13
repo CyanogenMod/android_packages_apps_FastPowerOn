@@ -252,6 +252,8 @@ public class FastBoot extends Activity {
         private Handler mHandler;
         Thread sendBroadcastThread = null;
         ProgressDialog pd = null;
+        private String usbMode;
+
         String systemLevelProcess[] = {
             "android.process.acore",
             "android.process.media",
@@ -350,6 +352,11 @@ public class FastBoot extends Activity {
             });
             enterAirplaneMode();
             KillProcess();
+
+            // clear USB composition mode
+            usbMode = SystemProperties.get("sys.usb.config");
+            SystemProperties.set("sys.usb.config", "none");
+
             SystemClock.sleep(1000);
             mPm.goToSleep(SystemClock.uptimeMillis());
             mFastBoot.runOnUiThread(new Runnable() {
@@ -372,6 +379,7 @@ public class FastBoot extends Activity {
                                         mFastBoot.getClass().getName());
             SystemProperties.set("service.bootanim.exit", "0");
             SystemProperties.set("ctl.start", "bootanim");
+            SystemProperties.set("sys.usb.config", usbMode);
             wl.acquire();
             SystemClock.sleep(5000);
             SystemProperties.set("service.bootanim.exit", "1");
